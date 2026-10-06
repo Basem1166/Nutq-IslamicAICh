@@ -7,9 +7,13 @@ import 'package:quran_recitation_core/quran_recitation_core.dart';
 import '../../../core/audio/reference_audio_player.dart';
 import '../../../core/audio/reference_audio_service.dart';
 import '../../../core/phonetizer_service.dart';
+import '../../../core/quran/surah_names.dart';
+import '../../../core/recitation/recitation_progress_store.dart';
 import '../../../core/recitation/sifat_labels.dart';
 import '../../../core/recitation/streaming_recitation_controller.dart';
 import '../../../theme/app_theme.dart';
+import '../../activity/data/activity_store.dart';
+import '../../saved/data/saved_bookmarks_store.dart';
 
 /// How the page lays out ayahs: the physical mushaf page that contains the
 /// entry ayah, or the whole surah scrolling.
@@ -79,6 +83,9 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
 
   String? _lastActiveKey;
 
+  /// Credits time spent actively reciting to the daily stats/streak.
+  final ActivitySessionTimer _activityTimer = ActivitySessionTimer();
+
   static String _k(int sura, int ayah) => '$sura:$ayah';
 
   @override
@@ -91,12 +98,16 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
     _markedSura = widget.surahNumber;
     _markedAyah = widget.ayahNumber;
     _controller.addListener(_followActiveAyah);
+    _controller.addListener(_trackActivity);
+    SavedBookmarksStore.instance.ensureLoaded();
     _rebuildPage();
   }
 
   @override
   void dispose() {
     _controller.removeListener(_followActiveAyah);
+    _controller.removeListener(_trackActivity);
+    _activityTimer.stop();
     _audioService.stop();
     _controller.dispose();
     _scroll.dispose();
@@ -174,6 +185,7 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
       _playingSura = null;
       _playingAyah = null;
     });
+    RecitationProgressStore.instance.save(sura, ayah);
     await _controller.start(
       startSura: sura,
       startAyah: ayah,
@@ -187,7 +199,17 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
     final key = _k(active.sura, active.ayah);
     if (key == _lastActiveKey) return;
     _lastActiveKey = key;
+    // Persist the auto-advanced ayah so Home resumes where recitation stopped.
+    RecitationProgressStore.instance.save(active.sura, active.ayah);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAyah(key));
+  }
+
+  void _trackActivity() {
+    if (_controller.isListening) {
+      _activityTimer.start();
+    } else {
+      _activityTimer.pause();
+    }
   }
 
   void _scrollToAyah(String key) {
@@ -329,7 +351,7 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${quran.getSurahNameEnglish(sura)} • Ayah $ayah',
+                    '${surahName(sura)} • Ayah $ayah',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -370,6 +392,34 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _showMeaning(sura, ayah);
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  SavedBookmarksStore.instance.isAyahSaved(sura, ayah)
+                      ? Icons.bookmark_rounded
+                      : Icons.bookmark_border_rounded,
+                  color: AppTheme.primary,
+                ),
+                title: Text(
+                  SavedBookmarksStore.instance.isAyahSaved(sura, ayah)
+                      ? 'Remove bookmark'
+                      : 'Bookmark ayah',
+                ),
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  final saved = await SavedBookmarksStore.instance
+                      .toggleAyahBookmark(surahNumber: sura, ayahNumber: ayah);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          saved ? 'Ayah $ayah bookmarked' : 'Bookmark removed',
+                        ),
+                      ),
+                    );
                 },
               ),
               ListTile(
@@ -454,7 +504,7 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${quran.getSurahNameEnglish(sura)} • Ayah $ayah',
+                  '${surahName(sura)} • Ayah $ayah',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -546,7 +596,7 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
   }
 
   Widget _header() {
-    final surahNameEn = quran.getSurahNameEnglish(_surahNumber);
+    final surahNameEn = surahName(_surahNumber);
     final subtitle = _viewMode == MushafViewMode.page
         ? 'Page $_pageNumber'
         : surahNameEn;
@@ -1065,7 +1115,7 @@ class _AyahPlayerSheetState extends State<_AyahPlayerSheet> {
             ),
             const SizedBox(height: 16),
             Text(
-              '${quran.getSurahNameEnglish(ref.sura)} • Ayah ${ref.ayah}',
+              '${surahName(ref.sura)} • Ayah ${ref.ayah}',
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,

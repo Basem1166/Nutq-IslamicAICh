@@ -53,43 +53,40 @@ class SavedBookmarksStore {
     final raw = _preferences!.getString(_storageKey);
     if (raw != null && raw.isNotEmpty) {
       final decoded = jsonDecode(raw) as List<dynamic>;
+      // Dedupe by (surah, ayah) keeping the most recent (first) entry.
+      final seen = <String>{};
       bookmarks.value = decoded
           .map((entry) => SavedBookmark.fromJson(entry as Map<String, dynamic>))
+          .where((b) => seen.add('${b.surahNumber}:${b.ayahNumber}'))
           .toList();
     }
     _loaded = true;
     _loading = false;
   }
 
-  bool isSaved(int surahNumber) {
+  bool isAyahSaved(int surahNumber, int ayahNumber) {
     return bookmarks.value.any(
-      (bookmark) => bookmark.surahNumber == surahNumber,
+      (bookmark) =>
+          bookmark.surahNumber == surahNumber &&
+          bookmark.ayahNumber == ayahNumber,
     );
   }
 
-  SavedBookmark? bookmarkForSurah(int surahNumber) {
-    for (final bookmark in bookmarks.value) {
-      if (bookmark.surahNumber == surahNumber) {
-        return bookmark;
-      }
-    }
-    return null;
-  }
-
-  Future<void> toggleSurahBookmark({
+  /// Adds or removes a bookmark for a single ayah. Returns true if the ayah is
+  /// saved afterwards.
+  Future<bool> toggleAyahBookmark({
     required int surahNumber,
     required int ayahNumber,
   }) async {
     await ensureLoaded();
-
     final current = List<SavedBookmark>.from(bookmarks.value);
     final existingIndex = current.indexWhere(
-      (bookmark) => bookmark.surahNumber == surahNumber,
+      (bookmark) =>
+          bookmark.surahNumber == surahNumber &&
+          bookmark.ayahNumber == ayahNumber,
     );
-
-    if (existingIndex >= 0) {
-      current.removeAt(existingIndex);
-    } else {
+    final nowSaved = existingIndex < 0;
+    if (nowSaved) {
       current.insert(
         0,
         SavedBookmark(
@@ -98,16 +95,22 @@ class SavedBookmarksStore {
           savedAt: DateTime.now(),
         ),
       );
+    } else {
+      current.removeAt(existingIndex);
     }
-
     bookmarks.value = current;
     await _persist();
+    return nowSaved;
   }
 
-  Future<void> removeSurah(int surahNumber) async {
+  Future<void> removeBookmark(int surahNumber, int ayahNumber) async {
     await ensureLoaded();
     final current = List<SavedBookmark>.from(bookmarks.value)
-      ..removeWhere((bookmark) => bookmark.surahNumber == surahNumber);
+      ..removeWhere(
+        (bookmark) =>
+            bookmark.surahNumber == surahNumber &&
+            bookmark.ayahNumber == ayahNumber,
+      );
     bookmarks.value = current;
     await _persist();
   }
