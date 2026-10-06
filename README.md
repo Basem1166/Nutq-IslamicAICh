@@ -59,8 +59,7 @@ server (`uvicorn main:app`).
 Tooling to make the Mualem recitation model small enough to run on a phone.
 
 - `mualem_pipeline.py`: a pruning → fine-tuning → quantization-aware training (QAT) pipeline for
-  Wav2Vec2-BERT. It uses knowledge distillation to guide structured pruning and to recover accuracy
-  afterwards. It runs locally or on Lightning AI.
+  Wav2Vec2-BERT.
 - `onnx-export-notebook.ipynb`: exports the trained checkpoint (QAT or FP32) to ONNX.
 - `convert_onnx_for_android.py`: rewrites the `ConvInteger` nodes made by dynamic quantization
   into float `Conv` nodes. ONNX Runtime has no kernel for `ConvInteger`, so without this step the
