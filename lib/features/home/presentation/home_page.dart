@@ -6,6 +6,7 @@ import '../../../theme/app_theme.dart';
 import '../../activity/data/activity_store.dart';
 import '../../profile/data/user_profile_store.dart';
 import '../../quran/presentation/surah_reader_page.dart';
+import '../../search/presentation/voice_search_sheet.dart';
 import 'reading_history_page.dart';
 import 'streaming_recitation_page.dart';
 import 'widgets/reading_progress_card.dart';
@@ -143,6 +144,18 @@ class HomePage extends StatelessWidget {
                               color: Colors.black.withValues(alpha: 0.56),
                             ),
                           ),
+                        ),
+                        IconButton(
+                          tooltip: 'Search by voice',
+                          onPressed: () async {
+                            final query = await showVoiceSearchSheet(context);
+                            if (query != null && query.isNotEmpty) {
+                              onSearchMeaning?.call(query);
+                            }
+                          },
+                          icon: const Icon(Icons.mic_none_rounded),
+                          color: AppTheme.primary,
+                          visualDensity: VisualDensity.compact,
                         ),
                       ],
                     ),

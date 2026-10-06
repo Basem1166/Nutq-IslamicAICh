@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Nutq uses the microphone to analyze your recitation and for voice search.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Nutq converts your speech to text so you can search by voice.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

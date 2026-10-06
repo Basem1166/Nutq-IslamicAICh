@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../../theme/app_theme.dart';
 import '../../../core/config.dart';
 import '../../../core/quran/surah_names.dart';
+import 'voice_search_sheet.dart';
 
 enum _SearchFilter { all, ayahs, hadiths, tafsir }
 
@@ -245,6 +246,13 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
+  Future<void> _searchByVoice() async {
+    final query = await showVoiceSearchSheet(context);
+    if (!mounted || query == null || query.isEmpty) return;
+    setState(() => _searchController.text = query);
+    _scheduleSearch(immediate: true);
+  }
+
   void _scheduleSearch({bool immediate = false, bool isLoadMore = false}) {
     _debounceTimer?.cancel();
 
@@ -453,7 +461,12 @@ class _SearchPageState extends State<SearchPage> {
               hintText: 'Search ayah, hadith, or tafsir',
               prefixIcon: const Icon(Icons.search, color: AppTheme.primary),
               suffixIcon: _searchController.text.isEmpty
-                  ? null
+                  ? IconButton(
+                      tooltip: 'Search by voice',
+                      onPressed: _searchByVoice,
+                      icon: const Icon(Icons.mic_none_rounded),
+                      color: AppTheme.primary,
+                    )
                   : IconButton(
                       onPressed: () {
                         setState(() {

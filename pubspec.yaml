@@ -62,6 +62,7 @@ dependencies:
   # packages/ so the app is self-contained.
   quran_recitation_core:
     path: packages/quran_recitation_core
+  speech_to_text: ^7.5.0
 
 dev_dependencies:
   flutter_test:
