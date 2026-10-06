@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:quran/quran.dart' as quran;
 
 import '../../../core/recitation/recitation_progress_store.dart';
 import '../../../theme/app_theme.dart';
 import '../../activity/data/activity_store.dart';
 import '../../profile/data/user_profile_store.dart';
 import '../../quran/presentation/surah_reader_page.dart';
+import 'reading_history_page.dart';
 import 'streaming_recitation_page.dart';
+import 'widgets/reading_progress_card.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key, this.onViewAllQuran, this.onSearchMeaning});
+  const HomePage({super.key, this.onSearchMeaning});
 
-  final VoidCallback? onViewAllQuran;
   final ValueChanged<String>? onSearchMeaning;
 
   @override
@@ -83,23 +83,6 @@ class HomePage extends StatelessWidget {
                         ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Notifications',
-                      onPressed: () {
-                        ScaffoldMessenger.of(context)
-                          ..hideCurrentSnackBar()
-                          ..showSnackBar(
-                            const SnackBar(
-                              content: Text('No new notifications yet'),
-                            ),
-                          );
-                      },
-                      icon: const Icon(
-                        Icons.notifications_none_rounded,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 18),
@@ -160,13 +143,6 @@ class HomePage extends StatelessWidget {
                               color: Colors.black.withValues(alpha: 0.56),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Search by voice',
-                          onPressed: () => onSearchMeaning?.call(''),
-                          icon: const Icon(Icons.mic_none_rounded),
-                          color: AppTheme.primary,
-                          visualDensity: VisualDensity.compact,
                         ),
                       ],
                     ),
@@ -243,15 +219,15 @@ class HomePage extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         HapticFeedback.mediumImpact();
+                        // Resume at the last ayah read or recited.
                         final position =
-                            RecitationProgressStore.instance.last.value;
-                        final surah = position?.surah ?? 18;
-                        final ayah = position?.ayah ?? 25;
+                            RecitationProgressStore.instance.last.value ??
+                            const RecitationPosition(1, 1);
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (context) => StreamingRecitationPage(
-                              surahNumber: surah,
-                              ayahNumber: ayah,
+                              surahNumber: position.surah,
+                              ayahNumber: position.ayah,
                             ),
                           ),
                         );
@@ -284,7 +260,11 @@ class HomePage extends StatelessWidget {
                   ),
                 ),
                 TextButton(
-                  onPressed: onViewAllQuran,
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => const ReadingHistoryPage(),
+                    ),
+                  ),
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.primary,
                     padding: EdgeInsets.zero,
@@ -312,9 +292,9 @@ class HomePage extends StatelessWidget {
               child: ValueListenableBuilder<RecitationPosition?>(
                 valueListenable: RecitationProgressStore.instance.last,
                 builder: (context, position, _) {
-                  final surah = position?.surah ?? 18;
-                  final ayah = position?.ayah ?? 25;
-                  return _ContinueReadingCard(
+                  final surah = position?.surah ?? 1;
+                  final ayah = position?.ayah ?? 1;
+                  return ReadingProgressCard(
                     surahNumber: surah,
                     ayahNumber: ayah,
                     onTap: () {
@@ -333,220 +313,7 @@ class HomePage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: const [
-                Expanded(
-                  child: Text(
-                    'Word of the Day',
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            child: _WordOfTheDayCard(),
-          ),
-          const SizedBox(height: 24),
         ],
-      ),
-    );
-  }
-}
-
-class _WordOfTheDayCard extends StatelessWidget {
-  const _WordOfTheDayCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.secondaryBackground,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'رَحْمَة',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    height: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Rahmah',
-                  style: TextStyle(
-                    color: AppTheme.secondary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Mercy',
-                  style: TextStyle(
-                    color: Colors.black.withValues(alpha: 0.62),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
-          Tooltip(
-            message: 'Play pronunciation',
-            child: Material(
-              color: Colors.white,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  ScaffoldMessenger.of(context)
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(
-                      const SnackBar(
-                        content: Text('Audio pronunciation coming soon'),
-                      ),
-                    );
-                },
-                child: const SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: Icon(Icons.volume_up_rounded, color: AppTheme.secondary),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ContinueReadingCard extends StatelessWidget {
-  const _ContinueReadingCard({
-    required this.surahNumber,
-    required this.ayahNumber,
-    required this.onTap,
-  });
-
-  final int surahNumber;
-  final int ayahNumber;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final surahName = quran.getSurahNameEnglish(surahNumber);
-    final revelation = quran.getPlaceOfRevelation(surahNumber);
-    final totalAyahs = quran.getVerseCount(surahNumber);
-    final progress = ayahNumber / totalAyahs;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.menu_book_rounded,
-                color: AppTheme.primary,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          surahName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryLight.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          revelation,
-                          style: const TextStyle(
-                            color: AppTheme.primary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Ayah $ayahNumber',
-                    style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.62),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 8,
-                      backgroundColor: AppTheme.outline.withValues(alpha: 0.35),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppTheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

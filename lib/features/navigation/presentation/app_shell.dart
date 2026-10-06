@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/app_theme.dart';
+import '../../activity/data/activity_store.dart';
 import '../../home/presentation/home_page.dart';
 import '../../profile/presentation/profile_page.dart';
 import '../../quran/presentation/quran_page.dart';
@@ -15,9 +16,29 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Roll today's minutes / streak over if the app resumes on a new day.
+    if (state == AppLifecycleState.resumed) {
+      ActivityStore.instance.refresh();
+    }
+  }
 
   void _openSearch(String query) {
     setState(() {
@@ -29,14 +50,7 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      HomePage(
-        onViewAllQuran: () {
-          setState(() {
-            _selectedIndex = 1;
-          });
-        },
-        onSearchMeaning: _openSearch,
-      ),
+      HomePage(onSearchMeaning: _openSearch),
       const QuranPage(),
       SearchPage(key: ValueKey(_searchQuery), initialQuery: _searchQuery),
       const SavedPage(),
