@@ -207,7 +207,7 @@ class _SearchPageState extends State<SearchPage> {
         debugPrint('Sending HEALTH request to $healthUri');
       }
 
-      final response = await _client.get(healthUri);
+      final response = await _client.get(healthUri, headers: kApiHeaders);
       if (kDebugMode) {
         debugPrint(
           'Health response (${response.statusCode}): ${response.body}',
@@ -311,7 +311,7 @@ class _SearchPageState extends State<SearchPage> {
 
       final response = await _client.post(
         searchUri,
-        headers: const {'Content-Type': 'application/json'},
+        headers: const {...kApiHeaders, 'Content-Type': 'application/json'},
         body: jsonEncode(requestBody),
       );
       if (kDebugMode) {
@@ -379,7 +379,7 @@ class _SearchPageState extends State<SearchPage> {
       debugPrint('Sending CHUNK request to $chunkUri for $chunkId');
     }
 
-    final response = await _client.get(chunkUri);
+    final response = await _client.get(chunkUri, headers: kApiHeaders);
     if (kDebugMode) {
       debugPrint(
         'Chunk response (${response.statusCode}) for $chunkId: ${response.body}',
