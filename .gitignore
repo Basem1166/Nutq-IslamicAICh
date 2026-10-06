@@ -12,12 +12,10 @@
 .swiftpm/
 .claude/
 migrate_working_dir/
-android/app/build.gradle.kts
 
 /windows/**
 /macos/**
 /linux/**
-/android/app/build.gradle.kts
 
 # IntelliJ related
 *.iml
