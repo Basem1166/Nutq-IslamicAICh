@@ -87,7 +87,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/models/mualem_multilevel_ctc_convfix2.onnx
+    - assets/models/IslamAiConvfix.onnx
     - assets/models/silero_vad.onnx
     - assets/models/vocab.json
     - assets/quran/quran-uthmani-imlaey.json

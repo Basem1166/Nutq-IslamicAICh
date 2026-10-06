@@ -15,7 +15,7 @@ class MualemModel {
   // ops that ONNX Runtime can't execute. This variant keeps MatMulInteger (int8,
   // ORT-supported) but converts the 48 Conv layers back to float Conv.
   static const String assetPath =
-      'assets/models/mualem_multilevel_ctc_convfix2.onnx';
+      'assets/models/IslamAiConvfix.onnx';
   static const String _inputName = 'input_features';
 
   OrtSession? _session;
