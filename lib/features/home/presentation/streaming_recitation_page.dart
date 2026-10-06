@@ -83,6 +83,10 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
 
   String? _lastActiveKey;
 
+  /// Scroll the marked ayah into view once the page's texts have loaded (on
+  /// open and after a view-mode switch).
+  bool _scrollToMarkedPending = true;
+
   /// Credits time spent actively reciting to the daily stats/streak.
   final ActivitySessionTimer _activityTimer = ActivitySessionTimer();
 
@@ -168,7 +172,16 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
         }
       }),
     );
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    final sura = _markedSura;
+    final ayah = _markedAyah;
+    if (_scrollToMarkedPending && sura != null && ayah != null) {
+      _scrollToMarkedPending = false;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scrollToAyah(_k(sura, ayah), animate: false),
+      );
+    }
   }
 
   // ---- Recitation control --------------------------------------------------
@@ -212,14 +225,33 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
     }
   }
 
-  void _scrollToAyah(String key) {
+  /// Brings the ayah [key] into view. The list builds rows lazily, so a row far
+  /// from the viewport has no context yet: jump to its estimated offset (which
+  /// builds the rows around it) and retry on the next frame until it exists.
+  void _scrollToAyah(String key, {bool animate = true, int attempt = 0}) {
+    if (!mounted) return;
     final ctx = _ayahKeys[key]?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeInOut,
-      alignment: 0.3,
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: animate ? const Duration(milliseconds: 350) : Duration.zero,
+        curve: Curves.easeInOut,
+        alignment: 0.3,
+      );
+      return;
+    }
+    if (attempt >= 5 || !_scroll.hasClients || _pageAyahs.isEmpty) return;
+    final idx = _pageAyahs.indexWhere((r) => _k(r.sura, r.ayah) == key);
+    if (idx < 0) return;
+    final position = _scroll.position;
+    position.jumpTo(
+      (idx / _pageAyahs.length * position.maxScrollExtent).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scrollToAyah(key, animate: animate, attempt: attempt + 1),
     );
   }
 
@@ -227,6 +259,7 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
     if (_controller.isListening || _controller.isBusy) return;
     if (mode == _viewMode) return;
     setState(() => _viewMode = mode);
+    _scrollToMarkedPending = true;
     _rebuildPage();
   }
 
@@ -575,9 +608,11 @@ class _StreamingRecitationPageState extends State<StreamingRecitationPage> {
                         _onHorizontalSwipe(details.primaryVelocity),
                     child: ListView(
                       controller: _scroll,
-                      // Eager (non-recycling) so each per-ayah GlobalKey is
-                      // attached exactly once — a recycling builder reuses rows
-                      // and trips "Duplicate GlobalKey".
+                      // Explicit children (not a recycling builder) so each
+                      // per-ayah GlobalKey is attached exactly once — reused
+                      // rows trip "Duplicate GlobalKey". Rows are still laid
+                      // out lazily near the viewport, so off-screen keys have
+                      // no context; _scrollToAyah handles that.
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                       children: [
                         if (finished) _resultsCard(),
