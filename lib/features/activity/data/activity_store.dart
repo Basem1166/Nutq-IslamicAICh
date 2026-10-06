@@ -36,8 +36,9 @@ class ActivityStore {
 
   static const String _storageKey = 'activity_by_day';
 
-  final ValueNotifier<ActivitySummary> summary =
-      ValueNotifier<ActivitySummary>(ActivitySummary.empty);
+  final ValueNotifier<ActivitySummary> summary = ValueNotifier<ActivitySummary>(
+    ActivitySummary.empty,
+  );
 
   /// date key (yyyy-MM-dd) -> total seconds practiced that day.
   final Map<String, int> _secondsByDay = <String, int>{};
@@ -53,7 +54,9 @@ class ActivityStore {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
       _secondsByDay
         ..clear()
-        ..addAll(decoded.map((key, value) => MapEntry(key, (value as num).toInt())));
+        ..addAll(
+          decoded.map((key, value) => MapEntry(key, (value as num).toInt())),
+        );
     }
     _loaded = true;
     _recompute();
@@ -66,6 +69,12 @@ class ActivityStore {
     _secondsByDay[key] = (_secondsByDay[key] ?? 0) + duration.inSeconds;
     await _persist();
     _recompute();
+  }
+
+  /// Re-derives the summary from stored data, e.g. after the app resumes past
+  /// midnight so "today" and the streak roll over.
+  void refresh() {
+    if (_loaded) _recompute();
   }
 
   void _recompute() {
@@ -105,4 +114,27 @@ class ActivityStore {
     final d = date.day.toString().padLeft(2, '0');
     return '${date.year}-$m-$d';
   }
+}
+
+/// Measures one stretch of practice (reading or reciting) and credits it to
+/// [ActivityStore] when paused or stopped. Safe to start/pause repeatedly, e.g.
+/// across app lifecycle changes.
+class ActivitySessionTimer {
+  DateTime? _startedAt;
+
+  bool get isRunning => _startedAt != null;
+
+  void start() {
+    _startedAt ??= DateTime.now();
+  }
+
+  /// Credits the elapsed time so far and stops measuring until [start].
+  void pause() {
+    final startedAt = _startedAt;
+    if (startedAt == null) return;
+    _startedAt = null;
+    ActivityStore.instance.recordSession(DateTime.now().difference(startedAt));
+  }
+
+  void stop() => pause();
 }

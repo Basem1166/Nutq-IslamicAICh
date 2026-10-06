@@ -40,8 +40,8 @@ class _AppGateState extends State<_AppGate> {
       ActivityStore.instance.ensureLoaded(),
       PhonetizerSettingsStore.instance.ensureLoaded(),
       RecitationProgressStore.instance.loadLast(
-        defaultSurah: 18,
-        defaultAyah: 25,
+        defaultSurah: 1,
+        defaultAyah: 1,
       ),
     ]);
   }
