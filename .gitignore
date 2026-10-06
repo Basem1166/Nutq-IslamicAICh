@@ -13,9 +13,9 @@
 .claude/
 migrate_working_dir/
 
-/windows/**
-/macos/**
-/linux/**
+/Flutter App/windows/**
+/Flutter App/macos/**
+/Flutter App/linux/**
 
 # IntelliJ related
 *.iml
@@ -35,8 +35,8 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
-/coverage/
+/Flutter App/build/
+/Flutter App/coverage/
 
 # Symbolication related
 app.*.symbols
@@ -45,6 +45,7 @@ app.*.symbols
 app.*.map.json
 
 # Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+/Flutter App/android/app/debug
+/Flutter App/android/app/profile
+/Flutter App/android/app/release
+/Flutter App/app/
