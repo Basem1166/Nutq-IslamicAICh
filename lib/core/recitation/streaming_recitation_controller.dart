@@ -7,6 +7,8 @@ import 'audio_recorder.dart';
 import 'recitation_debug.dart';
 import 'recitation_worker.dart';
 
+export 'recitation_worker.dart' show AyahRef;
+
 /// Lifecycle phase of a live streaming recitation.
 enum StreamingPhase {
   /// Nothing started yet.
@@ -29,10 +31,6 @@ enum StreamingPhase {
   error,
 }
 
-/// A single ayah on the page the user is reciting through, identified by its
-/// surah + ayah number.
-typedef AyahRef = ({int sura, int ayah});
-
 /// Drives a live, on-device streaming recitation across a *page* of ayahs and
 /// exposes the incremental per-ayah results to the UI as a [ChangeNotifier].
 ///
@@ -41,14 +39,14 @@ typedef AyahRef = ({int sura, int ayah});
 /// this controller only ships audio chunks in and maps the worker's
 /// [RecitationEvent]s back onto observable UI state.
 ///
-/// Unlike a single-ayah flow, the session is allowed to auto-advance from one
-/// ayah to the next (the core `RecitationSession` preloads + advances within a
-/// surah on its own). This controller mirrors that advance with an "active
-/// ayah" pointer into [_pageAyahs] so each word event is attributed to the
-/// right ayah, colours persist per ayah down the page, and recitation stops
-/// once the last ayah of the page completes. Crossing a surah boundary mid-page
-/// re-seeds the worker session (the core preloads only the same-surah
-/// successor).
+/// Unlike a single-ayah flow, recitation flows from one ayah to the next. The
+/// worker continues into the page's next ayah on its own (from references
+/// prefetched at [start]), on the very next audio chunk after an ayah
+/// completes. This controller mirrors that advance with an "active ayah"
+/// pointer into [_pageAyahs] so each word event is attributed to the right
+/// ayah, colours persist per ayah down the page, and recitation stops once the
+/// last ayah of the page completes. If a reference wasn't prefetched in time,
+/// the worker reports [RecitationContinueFailed] and the controller re-seeds.
 class StreamingRecitationController extends ChangeNotifier {
   StreamingRecitationController({
     AudioRecorderService? recorder,
@@ -97,10 +95,6 @@ class StreamingRecitationController extends ChangeNotifier {
   /// Provisional live result for the word currently being recited (always the
   /// active ayah). Never overrides a committed result — see [wordsForAyah].
   WordResult? _liveWord;
-
-  /// Monotonic token guarding the delayed "re-seed if stalled" check so an
-  /// older pending check can't fire after a newer advance.
-  int _reseedToken = 0;
 
   /// Wall clock since the current listen started; drives the `[timing-ui]`
   /// latency logs (see [kRecitationTimingLogs]). [_lastStreamUpdateMs] records
@@ -253,11 +247,17 @@ class StreamingRecitationController extends ChangeNotifier {
       await _worker.load();
       _eventSub ??= _worker.events.listen(_onWorkerEvent);
 
-      final spanCount =
-          await _worker.startAyah(sura: startSura, ayah: startAyah);
+      final spanCount = await _worker.startAyah(
+        sura: startSura,
+        ayah: startAyah,
+        pageOrder: ayahs.sublist(idx),
+      );
       debugPrint(
         '[stream] BUILD=worker startAyah $startSura:$startAyah spans=$spanCount',
       );
+      // Phonetize the rest of the page in the background so the worker can
+      // move between ayahs without a phonetizer round trip.
+      unawaited(_worker.prefetch(ayahs.sublist(idx + 1)));
 
       final stream = await _recorder.startStream();
       _sub = stream.listen(
@@ -338,6 +338,13 @@ class StreamingRecitationController extends ChangeNotifier {
         }
       case RecitationError(:final message):
         _fail(message);
+      case RecitationContinued(:final sura, :final ayah):
+        debugPrint('[stream] CONTINUED in worker -> $sura:$ayah');
+      case RecitationContinueFailed(:final sura, :final ayah):
+        final active = activeAyah;
+        if (active != null && active.sura == sura && active.ayah == ayah) {
+          unawaited(_reseed(sura, ayah, _activeAyahIndex));
+        }
     }
   }
 
@@ -460,49 +467,16 @@ class StreamingRecitationController extends ChangeNotifier {
       return;
     }
 
-    // Advance to the next ayah on the page.
-    final completed = _pageAyahs[_activeAyahIndex];
+    // Advance to the next ayah on the page. The worker has already switched
+    // its session to it (or reports RecitationContinueFailed if it couldn't).
     _activeAyahIndex++;
     _liveWord = null;
-    final next = _pageAyahs[_activeAyahIndex];
     notifyListeners();
-
-    // The core session goes deaf the instant an ayah is marked `complete`
-    // (feedAudio early-returns), so its native auto-advance only works when the
-    // reciter flows into the next ayah within one continuous phrase. The
-    // moment they pause, the session stops listening. To keep going we re-seed
-    // a fresh worker session for the next ayah — making every ayah behave like
-    // the first one.
-    //
-    // Across a surah boundary the core can't preload the successor at all, so
-    // re-seed immediately. Within a surah, give native auto-advance a brief
-    // chance first (continuous reciters) and only re-seed if the next ayah is
-    // still silent — see [_scheduleReseed].
-    if (next.sura != completed.sura) {
-      scheduleMicrotask(() => _reseed(next.sura, next.ayah, _activeAyahIndex));
-    } else {
-      _scheduleReseed(next, _activeAyahIndex);
-    }
-  }
-
-  /// After advancing within a surah, wait briefly: if native auto-advance has
-  /// already started feeding the next ayah (a continuous reciter), do nothing;
-  /// otherwise the session has gone deaf, so re-seed it.
-  void _scheduleReseed(AyahRef next, int forIndex) {
-    final token = ++_reseedToken;
-    Future<void>.delayed(const Duration(milliseconds: 350), () {
-      if (token != _reseedToken) return; // a newer advance superseded us
-      if (_phase != StreamingPhase.listening) return;
-      if (_activeAyahIndex != forIndex) return;
-      final committed = _wordsByAyah[_keyOf(next.sura, next.ayah)];
-      if (committed != null && committed.isNotEmpty) return; // native advance OK
-      unawaited(_reseed(next.sura, next.ayah, forIndex));
-    });
   }
 
   /// Tears down and rebuilds the worker session for `(sura, ayah)` without
-  /// closing the mic. Used to continue into the next ayah after a pause (and at
-  /// surah boundaries the core can't cross on its own).
+  /// closing the mic. Fallback for when the worker couldn't continue on its
+  /// own because the reference wasn't prefetched yet.
   Future<void> _reseed(int sura, int ayah, int forIndex) async {
     if (_phase != StreamingPhase.listening) return;
     if (_activeAyahIndex != forIndex) return;

@@ -111,6 +111,7 @@ class SessionConfig {
     this.vadEnabled = true,
     this.eagerEmissionPerTolerant = 0.60,
     this.silenceEmitTimeoutS = 1.0,
+    this.ayahEndSilenceMs = 700,
   });
 
   /// First-word PER must be below this for eager emission. More
@@ -141,6 +142,13 @@ class SessionConfig {
   /// When VAD is disabled, if no new tokens for this many seconds,
   /// auto-flush and classify. Replaces VAD's silence-detection role.
   final double silenceEmitTimeoutS;
+
+  /// Silence window (ms) used once the reciter has fully said the ayah's
+  /// *last* word (its alignment PER ≤ [eagerEmissionPer]). Caps the Madd
+  /// anticipation stretch (2.0–2.5 s), which otherwise delays "ayah complete"
+  /// at every waqf because ayah endings almost always carry a madd. Never
+  /// raises the window above the current one. Mid-ayah words are unaffected.
+  final int ayahEndSilenceMs;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -314,6 +322,9 @@ class RecitationSession {
   /// integrator uses to auto-stop. Reset per ayah in [_applyAyahReference].
   bool _ayahCompleteFired = false;
 
+  /// Whether the VAD window is currently capped by [SessionConfig.ayahEndSilenceMs].
+  bool _ayahEndCapped = false;
+
   // Stash of original streamer config values for Madd stretch restore.
   double? _origBaseChunkS;
   double? _origExpansionS;
@@ -378,6 +389,7 @@ class RecitationSession {
     _lastTokenTime = DateTime.now();
     _lastMaddAnchorIdx = -1;
     _ayahCompleteFired = false;
+    _ayahEndCapped = false;
 
     // Cache originals once for Madd stretch restore.
     _origBaseChunkS ??= streamer.cfg.baseChunkS;
@@ -738,6 +750,29 @@ class RecitationSession {
       }
     }
 
+    // Ayah end: once the final word (madd included) has been fully said, the
+    // stretched window only delays "ayah complete" — while a madd is still
+    // being voiced VAD reports speech, so the silence timer isn't running
+    // anyway. Re-checked every chunk because the anchor doesn't change while
+    // the reciter holds the last word.
+    if (_saidLastWord()) {
+      final cap = cfg.ayahEndSilenceMs * cfg.sampleRate ~/ 1000;
+      if (_vad.minSilenceSamples > cap) {
+        _vad.minSilenceSamples = cap;
+        // ignore: avoid_print
+        print(
+          '[session-madd] ayah-end cap silenceWindow=${cfg.ayahEndSilenceMs}ms',
+        );
+      }
+      _ayahEndCapped = true;
+      return;
+    }
+    if (_ayahEndCapped) {
+      // The match regressed (e.g. still elongating) — restore the stretch.
+      _ayahEndCapped = false;
+      _lastMaddAnchorIdx = -1;
+    }
+
     if (_lastMaddAnchorIdx == anchoredIdx) return;
     _lastMaddAnchorIdx = anchoredIdx;
 
@@ -753,6 +788,29 @@ class RecitationSession {
       }
     }
     _applyMaddStretch(maxRun);
+  }
+
+  /// Whether the final word of the ayah has been fully recited (PER ≤
+  /// [SessionConfig.eagerEmissionPer]). Uses [AdaptiveStreamingMuaalem.tentativeText]
+  /// so a final word still in the streamer's uncommitted tail counts — during
+  /// silence the streamer receives no audio, so committed text alone could
+  /// lag behind forever. Only evaluated near the end of the ayah.
+  bool _saidLastWord() {
+    final lastIdx = _wordSpans.length - 1;
+    final curIdx = _ayah!.currentWordIdx;
+    if (lastIdx < 0 || curIdx < lastIdx - 1 || curIdx > lastIdx) return false;
+    final hyp = _getSafePhraseHyp(streamer.tentativeText);
+    if (hyp.trim().isEmpty) return false;
+    final matches = alignPhraseToWords(
+      phraseHyp: hyp,
+      wordSpans: _wordSpans,
+      startIdx: curIdx,
+    ).wordMatches;
+    if (matches.isEmpty) return false;
+    final m = matches.last;
+    return m.wordIdx == lastIdx &&
+        m.hypPhonemes.trim().isNotEmpty &&
+        m.per <= cfg.eagerEmissionPer;
   }
 
   void _applyMaddStretch(int maxRun) {
