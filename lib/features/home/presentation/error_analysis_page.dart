@@ -4,6 +4,7 @@ import 'package:quran/quran.dart' as quran;
 
 import '../../../core/phonetizer_service.dart';
 import '../../../core/phonetizer_settings_store.dart';
+import '../../../core/quran/surah_names.dart';
 import '../../activity/data/activity_store.dart';
 import '../../../core/recitation/audio_recorder.dart';
 import '../../../core/recitation/ctc_decoder.dart';
@@ -504,7 +505,7 @@ class _ErrorAnalysisPageState extends State<ErrorAnalysisPage> {
             const SizedBox(height: 24),
             Builder(
               builder: (ctx) {
-                final surahNameEn = quran.getSurahNameEnglish(_surah);
+                final surahNameEn = surahName(_surah);
                 final surahNameAr = quran.getSurahNameArabic(_surah);
 
                 return Container(

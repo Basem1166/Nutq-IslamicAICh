@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quran/quran.dart' as quran;
 
+import '../../../core/quran/surah_names.dart';
 import '../../../theme/app_theme.dart';
 import '../../quran/presentation/surah_reader_page.dart';
 import '../data/saved_bookmarks_store.dart';
@@ -342,7 +343,7 @@ class _SavedBookmarkCard extends StatelessWidget {
     final surahNumber = bookmark.surahNumber;
     final verseCount = quran.getVerseCount(surahNumber);
     final progress = bookmark.ayahNumber / verseCount;
-    final surahNameEnglish = quran.getSurahNameEnglish(surahNumber);
+    final surahNameEnglish = surahName(surahNumber);
     final surahNameArabic = quran.getSurahNameArabic(surahNumber);
     final revelation = quran.getPlaceOfRevelation(surahNumber);
 

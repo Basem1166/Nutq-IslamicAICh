@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quran/quran.dart' as quran;
 
+import '../../../core/quran/surah_names.dart';
 import '../../../theme/app_theme.dart';
+import '../data/quran_search.dart';
 import 'surah_reader_page.dart';
 
 class QuranPage extends StatefulWidget {
@@ -28,10 +30,10 @@ class _QuranPageState extends State<QuranPage> {
 
   @override
   Widget build(BuildContext context) {
-    final surahs = List<int>.generate(
-      quran.totalSurahCount,
-      (index) => index + 1,
-    ).where(_matchesQuery).toList();
+    final results = QuranSearch.search(_query);
+    final searching = _query.trim().isNotEmpty;
+    String label(String name, int count) =>
+        searching ? '$name ($count)' : name;
 
     return Column(
       children: [
@@ -40,7 +42,7 @@ class _QuranPageState extends State<QuranPage> {
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
           child: TextField(
             controller: _searchController,
-            onChanged: (value) => setState(() => _query = value),
+            onChanged: _onQueryChanged,
             decoration: InputDecoration(
               hintText: 'Search surah, page, or juz',
               prefixIcon: const Icon(Icons.search),
@@ -69,17 +71,17 @@ class _QuranPageState extends State<QuranPage> {
             child: Row(
               children: [
                 _TabButton(
-                  label: 'Surahs',
+                  label: label('Surahs', results.surahs.length),
                   selected: _selectedTab == 0,
                   onTap: () => _switchTab(0),
                 ),
                 _TabButton(
-                  label: 'Pages',
+                  label: label('Pages', results.pages.length),
                   selected: _selectedTab == 1,
                   onTap: () => _switchTab(1),
                 ),
                 _TabButton(
-                  label: 'Juz',
+                  label: label('Juz', results.juz.length),
                   selected: _selectedTab == 2,
                   onTap: () => _switchTab(2),
                 ),
@@ -94,14 +96,16 @@ class _QuranPageState extends State<QuranPage> {
             onPageChanged: (index) => setState(() => _selectedTab = index),
             children: [
               _SurahListView(
-                surahs: surahs,
+                surahs: results.surahs,
                 onTapSurah: (surahNumber) =>
                     _showSurahReader(context, surahNumber),
               ),
               _PageListView(
+                pages: results.pages,
                 onTapPage: (pageNumber) => _showPageReader(context, pageNumber),
               ),
               _JuzListView(
+                juz: results.juz,
                 onTapJuz: (juzNumber) => _showJuzReader(context, juzNumber),
               ),
             ],
@@ -111,17 +115,13 @@ class _QuranPageState extends State<QuranPage> {
     );
   }
 
-  bool _matchesQuery(int surahNumber) {
-    final query = _query.trim().toLowerCase();
-    if (query.isEmpty) {
-      return true;
+  void _onQueryChanged(String value) {
+    setState(() => _query = value);
+    // "page 12" / "juz 30" jump straight to the matching tab.
+    final scope = QuranSearch.search(value).explicitScope;
+    if (scope != null && scope.index != _selectedTab) {
+      _switchTab(scope.index);
     }
-
-    return quran
-            .getSurahNameEnglish(surahNumber)
-            .toLowerCase()
-            .contains(query) ||
-        quran.getSurahNameArabic(surahNumber).toLowerCase().contains(query);
   }
 
   void _switchTab(int index) {
@@ -257,7 +257,7 @@ class _QuranPageState extends State<QuranPage> {
               final end = range.last as int;
 
               return _InfoTile(
-                title: quran.getSurahNameEnglish(surahNumber),
+                title: surahName(surahNumber),
                 subtitle:
                     '${quran.getSurahNameArabic(surahNumber)} • Verses $start-$end',
                 trailing: '${end - start + 1} ayahs',
@@ -299,18 +299,23 @@ class _SurahListView extends StatelessWidget {
 }
 
 class _PageListView extends StatelessWidget {
-  const _PageListView({required this.onTapPage});
+  const _PageListView({required this.pages, required this.onTapPage});
 
+  final List<int> pages;
   final ValueChanged<int> onTapPage;
 
   @override
   Widget build(BuildContext context) {
+    if (pages.isEmpty) {
+      return const Center(child: Text('No pages matched your search'));
+    }
+
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-      itemCount: quran.totalPagesCount,
+      itemCount: pages.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final pageNumber = index + 1;
+        final pageNumber = pages[index];
         final pageData = quran.getPageData(pageNumber);
         return _InfoTile(
           title: 'Page $pageNumber',
@@ -330,25 +335,30 @@ class _PageListView extends StatelessWidget {
       final surahNumber = map['surah'] as int;
       final start = map['start'] as int;
       final end = map['end'] as int;
-      parts.add('${quran.getSurahNameEnglish(surahNumber)} $start-$end');
+      parts.add('${surahName(surahNumber)} $start-$end');
     }
     return parts.join(' • ');
   }
 }
 
 class _JuzListView extends StatelessWidget {
-  const _JuzListView({required this.onTapJuz});
+  const _JuzListView({required this.juz, required this.onTapJuz});
 
+  final List<int> juz;
   final ValueChanged<int> onTapJuz;
 
   @override
   Widget build(BuildContext context) {
+    if (juz.isEmpty) {
+      return const Center(child: Text('No juz matched your search'));
+    }
+
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-      itemCount: quran.totalJuzCount,
+      itemCount: juz.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final juzNumber = index + 1;
+        final juzNumber = juz[index];
         final juzMap = quran.getSurahAndVersesFromJuz(juzNumber);
         return _InfoTile(
           title: 'Juz $juzNumber',
@@ -367,7 +377,7 @@ class _JuzListView extends StatelessWidget {
       final range = entry.value as List;
       final start = range.first as int;
       final end = range.last as int;
-      parts.add('${quran.getSurahNameEnglish(surahNumber)} $start-$end');
+      parts.add('${surahName(surahNumber)} $start-$end');
     }
     return parts.join(' • ');
   }
@@ -469,7 +479,7 @@ class _SurahTile extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                quran.getSurahNameEnglish(surahNumber),
+                                surahName(surahNumber),
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -478,7 +488,7 @@ class _SurahTile extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${quran.getPlaceOfRevelation(surahNumber)} • Page $pageNumber',
+                                '${surahMeaning(surahNumber)} • ${quran.getPlaceOfRevelation(surahNumber)} • Page $pageNumber',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: Colors.black.withValues(alpha: 0.58),
